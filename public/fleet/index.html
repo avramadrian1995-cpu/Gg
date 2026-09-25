@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Portal flote ITP Rădăuți – MISEDA INSPECT</title>
+  <meta name="description" content="Portal pentru firme: toate vehiculele flotei cu datele de expirare ITP, programare pentru mai multe mașini odată la MISEDA INSPECT Rădăuți.">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">
+        <span class="logo-mark">ITP</span>
+        <span>MISEDA INSPECT<small>Portal flote</small></span>
+      </a>
+      <nav class="nav" id="userNav" hidden>
+        <span id="companyName" class="small"></span>
+        <button id="logoutBtn" type="button">Ieșire</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap app-main">
+    <div id="loginView" class="grid-2" hidden>
+      <div class="stack">
+        <h1>ITP pentru flota firmei tale</h1>
+        <p class="muted">Vezi într-un singur loc când expiră ITP-ul fiecărui vehicul, primești remindere automate
+          și programezi mai multe mașini în aceeași zi, fără telefoane.</p>
+        <ul class="muted">
+          <li>Autoturisme și utilitare sub 3,5 t, taxi și ride-sharing</li>
+          <li>Istoricul inspecțiilor pentru fiecare vehicul</li>
+          <li>Remindere prin e-mail cu 30 și 7 zile înainte</li>
+        </ul>
+        <p>Nu ai cont? Sună la <strong>0756 596 565</strong> și îți creăm unul gratuit.</p>
+      </div>
+      <form class="card stack" id="loginForm">
+        <h2>Autentificare firmă</h2>
+        <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
+        <label>Parolă <input name="password" type="password" autocomplete="current-password" required></label>
+        <p class="error" id="loginError" hidden></p>
+        <button class="btn primary" type="submit">Intră</button>
+      </form>
+    </div>
+
+    <div id="app" hidden>
+      <div class="stats" id="stats"></div>
+
+      <div class="toolbar">
+        <button class="btn primary" id="bookSelected" type="button" disabled>Programează selectate</button>
+        <button class="btn" id="addVehicle" type="button">Adaugă vehicul</button>
+        <span class="muted small" id="selInfo"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr>
+            <th><input type="checkbox" id="selectAll" aria-label="Selectează toate"></th>
+            <th>Vehicul</th><th>ITP expiră</th><th>Status</th><th>Programare</th><th></th>
+          </tr></thead>
+          <tbody id="vehicleRows"></tbody>
+        </table>
+      </div>
+
+      <h2 class="history-title">Istoric inspecții</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Data</th><th>Vehicul</th><th>Rezultat</th><th>Valabil până la</th><th>Preț</th></tr></thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/fleet.js"></script>
+</body>
+</html>

@@ -83,7 +83,8 @@ body {
   z-index: 1;
 }
 .topbar h1 { font-size: 1.2rem; margin: 0; }
-.topbar-actions { display: flex; gap: 8px; }
+.topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.button-like { text-decoration: none; }
 
 main { max-width: 900px; margin: 0 auto; padding: 16px; }
 

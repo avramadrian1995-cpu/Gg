@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Administrare – MISEDA ITP</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/admin/">
+        <span class="logo-mark">ITP</span>
+        <span>MISEDA INSPECT<small>Administrare stație</small></span>
+      </a>
+      <nav class="nav" id="userNav" hidden>
+        <span id="userEmail" class="small"></span>
+        <button id="logoutBtn" type="button">Ieșire</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap app-main">
+    <form class="card login stack" id="loginForm" hidden>
+      <h2>Autentificare stație</h2>
+      <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
+      <label>Parolă <input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="error" id="loginError" hidden></p>
+      <button class="btn primary" type="submit">Intră</button>
+    </form>
+
+    <div id="app" hidden>
+      <div class="stats" id="stats"></div>
+
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="bookings" aria-selected="true">Programări</button>
+        <button role="tab" data-tab="vehicles" aria-selected="false">Vehicule și clienți</button>
+        <button role="tab" data-tab="companies" aria-selected="false">Flote</button>
+        <button role="tab" data-tab="outbox" aria-selected="false">Mesaje</button>
+        <button role="tab" data-tab="settings" aria-selected="false">Setări</button>
+      </div>
+
+      <section data-tabpanel="bookings">
+        <div class="toolbar">
+          <button class="btn sm" id="prevDay" type="button" aria-label="Ziua anterioară">‹</button>
+          <label>Ziua <input type="date" id="bookingDate"></label>
+          <button class="btn sm" id="nextDay" type="button" aria-label="Ziua următoare">›</button>
+          <button class="btn sm" id="todayBtn" type="button">Azi</button>
+          <span class="muted small" id="dayInfo"></span>
+          <button class="btn primary" id="newBookingBtn" type="button">Programare nouă</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Ora</th><th>Vehicul</th><th>Client</th><th>Serviciu</th><th>ITP actual</th><th>Status</th><th></th></tr></thead>
+            <tbody id="bookingRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section data-tabpanel="vehicles" hidden>
+        <div class="toolbar">
+          <label>Caută <input type="search" id="vehicleSearch" placeholder="Număr, nume, telefon, firmă"></label>
+          <label>Filtru
+            <select id="vehicleFilter">
+              <option value="0">Toate</option>
+              <option value="30">ITP expiră în 30 de zile</option>
+              <option value="60">ITP expiră în 60 de zile</option>
+            </select>
+          </label>
+          <a class="btn" href="/api/admin/vehicles.csv">Export CSV</a>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Vehicul</th><th>Proprietar</th><th>Contact</th><th>ITP expiră</th><th>Ultima inspecție</th><th>SMS</th><th></th></tr></thead>
+            <tbody id="vehicleRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section data-tabpanel="companies" hidden>
+        <div class="toolbar">
+          <p class="muted">Firmele primesc un cont în portalul de flote, unde își văd vehiculele și programează mai multe mașini odată.</p>
+          <button class="btn primary" id="newCompanyBtn" type="button">Firmă nouă</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Firmă</th><th>CUI</th><th>Cont</th><th>Vehicule</th><th>Expiră în 30 zile</th></tr></thead>
+            <tbody id="companyRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section data-tabpanel="outbox" hidden>
+        <div class="toolbar">
+          <p class="muted" id="outboxNote">Remindere automate: ITP care expiră (la numărul de zile din Setări) și programările de mâine.
+            Se verifică la fiecare 15 minute.</p>
+          <label>Status
+            <select id="outboxFilter">
+              <option value="">Toate</option>
+              <option value="queued">În așteptare</option>
+              <option value="sent">Trimise</option>
+              <option value="failed">Eșuate</option>
+            </select>
+          </label>
+          <button class="btn primary" id="runOutbox" type="button">Trimite acum</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Creat</th><th>Tip</th><th>Canal</th><th>Destinatar</th><th>Mesaj</th><th>Status</th></tr></thead>
+            <tbody id="outboxRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section data-tabpanel="settings" hidden>
+        <form id="settingsForm" class="stack">
+          <div class="card stack">
+            <h3>Date stație</h3>
+            <div class="fields">
+              <label>Denumire <input name="station.name"></label>
+              <label>Cod RAR <input name="station.rarCode"></label>
+              <label>Telefon <input name="station.phone"></label>
+              <label>E-mail <input name="station.email" type="email"></label>
+            </div>
+            <label>Adresă <input name="station.address"></label>
+            <div class="fields">
+              <label>Link Google Maps <input name="station.mapsUrl"></label>
+              <label>Link recenzie Google <input name="station.reviewUrl" placeholder="https://g.page/r/…/review"></label>
+              <label>Politică de confidențialitate <input name="station.privacyUrl"></label>
+            </div>
+          </div>
+
+          <div class="card stack">
+            <h3>Program și programări</h3>
+            <div class="fields" id="hoursFields"></div>
+            <div class="fields">
+              <label>Durata unui interval
+                <select name="slotMinutes">
+                  <option>15</option><option>20</option><option>30</option><option>40</option><option>45</option><option>60</option>
+                </select>
+              </label>
+              <label>Linii de inspecție (mașini în paralel) <input name="lanes" type="number" min="1" max="5"></label>
+              <label>Programări cu câte zile înainte <input name="bookingDaysAhead" type="number" min="1" max="90"></label>
+            </div>
+            <label>Zile închise (sărbători), separate prin virgulă
+              <input name="closedDates" placeholder="2026-12-25, 2026-12-26, 2027-01-01">
+            </label>
+          </div>
+
+          <div class="card stack">
+            <h3>Servicii și prețuri</h3>
+            <div id="servicesFields" class="stack"></div>
+            <div class="row"><button class="btn sm" type="button" id="addService">Adaugă serviciu</button></div>
+          </div>
+
+          <div class="card stack">
+            <h3>Remindere</h3>
+            <label>Trimite reminder ITP cu atâtea zile înainte de expirare
+              <input name="reminderDays" placeholder="30, 7, 1">
+            </label>
+            <label class="check"><input type="checkbox" name="reviewRequest"> <span>După ITP admis, trimite clientului link pentru recenzie Google (dacă linkul e completat)</span></label>
+          </div>
+
+          <p class="error" id="settingsError" hidden></p>
+          <div class="row"><button class="btn primary" type="submit">Salvează setările</button></div>
+        </form>
+
+        <form id="passwordForm" class="card stack" autocomplete="off">
+          <h3>Schimbă parola</h3>
+          <div class="fields">
+            <label>Parola actuală <input name="current" type="password" autocomplete="current-password" required></label>
+            <label>Parola nouă (min. 10 caractere) <input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+          </div>
+          <div class="row"><button class="btn" type="submit">Schimbă parola</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

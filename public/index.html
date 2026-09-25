@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Programare ITP Rădăuți – MISEDA INSPECT | Stație ITP autorizată RAR</title>
+  <meta name="description" content="Programează online ITP în Rădăuți la MISEDA INSPECT, stație autorizată RAR (SV096). Autoturisme, utilitare sub 3,5 t, taxi. Remindere gratuite prin SMS înainte să expire ITP-ul.">
+  <link rel="canonical" href="https://misedainspectsrl.ro/">
+  <meta property="og:title" content="Programare ITP online în Rădăuți – MISEDA INSPECT">
+  <meta property="og:description" content="Alege ziua și ora, primești confirmare prin SMS. Stație ITP autorizată RAR, Str. Izvoarelor 2C, Rădăuți.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ro_RO">
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "AutoRepair",
+    "name": "MISEDA INSPECT S.R.L. – Stație ITP Rădăuți",
+    "description": "Stație de inspecție tehnică periodică (ITP) autorizată RAR pentru autoturisme și utilitare sub 3,5 t.",
+    "url": "https://misedainspectsrl.ro/",
+    "telephone": "+40756596565",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Str. Izvoarelor Nr. 2C",
+      "addressLocality": "Rădăuți",
+      "addressRegion": "Suceava",
+      "addressCountry": "RO"
+    },
+    "areaServed": ["Rădăuți", "Siret", "Vicovu de Sus", "Milișăuți", "Marginea", "Arbore", "Horodnic", "Putna", "Gura Humorului"],
+    "openingHoursSpecification": [
+      { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "opens": "09:00", "closes": "18:00" },
+      { "@type": "OpeningHoursSpecification", "dayOfWeek": "Saturday", "opens": "09:00", "closes": "13:00" }
+    ],
+    "potentialAction": {
+      "@type": "ReserveAction",
+      "target": "https://misedainspectsrl.ro/#programare",
+      "name": "Programare ITP online"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">
+        <span class="logo-mark">ITP</span>
+        <span>MISEDA INSPECT<small>Stație ITP Rădăuți · RAR SV096</small></span>
+      </a>
+      <nav class="nav" aria-label="Meniu">
+        <a href="#preturi">Prețuri</a>
+        <a href="#reminder">Reminder gratuit</a>
+        <a href="/fleet/">Flote</a>
+        <a class="cta" href="#programare">Programează-te</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <h1>Programare ITP online în Rădăuți</h1>
+        <p class="lead">Alegi ziua și ora, primești confirmare prin SMS și nu mai stai la coadă.
+          Autoturisme, utilitare sub 3,5 t, taxi și ride-sharing, cu echipamente de ultimă generație conectate la RAR.</p>
+        <div class="hero-actions">
+          <a class="btn accent" href="#programare">Alege ora</a>
+          <a class="btn ghost" id="heroPhone" href="tel:+40756596565">Sună: 0756 596 565</a>
+        </div>
+      </div>
+      <ul class="facts">
+        <li><strong>Adresă</strong><span id="factAddress">Str. Izvoarelor Nr. 2C, Rădăuți, jud. Suceava</span> · <a id="mapsLink" href="#" target="_blank" rel="noopener">Hartă</a></li>
+        <li><strong>Program azi</strong><span id="factToday">—</span></li>
+        <li><strong>Experiență</strong>Peste 18 ani și 15.000 de inspecții</li>
+        <li><strong>Venim din</strong>Rădăuți, Siret, Vicovu de Sus, Milișăuți, Marginea, Arbore, Horodnic, Putna, Gura Humorului</li>
+      </ul>
+    </div>
+  </section>
+
+  <main>
+    <section class="block" id="programare">
+      <div class="wrap">
+        <h2>Programează-te la ITP</h2>
+        <p class="section-lead">Durează un minut. Primești SMS de confirmare și un reminder cu o zi înainte.</p>
+
+        <div class="card" id="bookingCard">
+          <ol class="steps" aria-label="Pași">
+            <li data-step="1" class="on">1. Ziua și ora</li>
+            <li data-step="2">2. Mașina și datele tale</li>
+            <li data-step="3">3. Confirmare</li>
+          </ol>
+
+          <div data-panel="1" class="stack">
+            <div>
+              <h3>Alege ziua</h3>
+              <div class="days" id="days" role="group" aria-label="Zile disponibile"></div>
+            </div>
+            <div>
+              <h3 id="slotsTitle">Alege ora</h3>
+              <div class="slots" id="slots" role="group" aria-label="Ore disponibile"></div>
+              <p class="muted small" id="slotsEmpty" hidden>Nu mai sunt ore libere în această zi. Alege altă zi.</p>
+            </div>
+            <div class="row">
+              <button class="btn primary" id="toStep2" disabled>Continuă</button>
+            </div>
+          </div>
+
+          <form data-panel="2" class="stack" id="bookingForm" hidden novalidate>
+            <div class="summary-box" id="slotSummary"></div>
+            <div class="fields">
+              <label>Număr de înmatriculare *
+                <input name="plate" required autocomplete="off" placeholder="SV 12 ABC" maxlength="15">
+              </label>
+              <label>Tip vehicul
+                <select name="service" id="serviceSelect"></select>
+              </label>
+              <label>Marcă / model
+                <input name="model" placeholder="Dacia Logan" maxlength="60">
+              </label>
+              <label>An fabricație
+                <input name="year" type="number" inputmode="numeric" min="1950" max="2100" placeholder="2016">
+              </label>
+            </div>
+            <div class="fields">
+              <label>Nume *
+                <input name="name" required autocomplete="name" maxlength="100">
+              </label>
+              <label>Telefon mobil *
+                <input name="phone" required type="tel" autocomplete="tel" placeholder="07xx xxx xxx">
+              </label>
+              <label>E-mail (opțional)
+                <input name="email" type="email" autocomplete="email">
+              </label>
+            </div>
+            <label class="check">
+              <input type="checkbox" name="consent">
+              <span>Vreau să primesc un SMS gratuit înainte să expire ITP-ul data viitoare. Mă pot dezabona oricând.
+                <a href="https://misedainspectsrl.ro/confidentialitate" target="_blank" rel="noopener">Politica de confidențialitate</a></span>
+            </label>
+            <p class="error" id="bookingError" hidden></p>
+            <div class="row">
+              <button type="button" class="btn ghost" id="backToStep1">Înapoi</button>
+              <button type="submit" class="btn primary" id="submitBooking">Confirmă programarea</button>
+            </div>
+          </form>
+
+          <div data-panel="3" hidden>
+            <div class="success" id="bookingDone"></div>
+            <div class="row">
+              <button class="btn" id="newBooking">Fă altă programare</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="manageCard" hidden>
+          <h3>Programarea ta</h3>
+          <div id="manageBody" class="stack"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="preturi">
+      <div class="wrap grid-2">
+        <div class="card">
+          <h2>Prețuri ITP</h2>
+          <p class="section-lead">Prețul final depinde de tipul vehiculului și de combustibil.</p>
+          <table class="prices"><tbody id="priceList"></tbody></table>
+        </div>
+        <div class="card">
+          <h2>Program</h2>
+          <p class="section-lead">Cu programare nu aștepți. Fără programare, te primim în limita locurilor.</p>
+          <table class="hours"><tbody id="hoursList"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="acte">
+      <div class="wrap grid-3">
+        <div class="card stack">
+          <h3>Ce acte aduci la ITP</h3>
+          <ul class="muted">
+            <li>Certificatul de înmatriculare (talonul)</li>
+            <li>Cartea de identitate a vehiculului (CIV)</li>
+            <li>Poliță RCA valabilă</li>
+          </ul>
+        </div>
+        <div class="card stack">
+          <h3>Cât e valabil ITP-ul</h3>
+          <p class="muted">Autoturism nou: 3 ani. Până la 12 ani vechime: 2 ani. Peste 12 ani: 1 an. Taxi și ride-sharing: 6 luni.
+            Data exactă apare pe certificatul ITP.</p>
+        </div>
+        <div class="card stack">
+          <h3>Ai o flotă?</h3>
+          <p class="muted">Firmele își văd toate vehiculele într-un singur loc, cu datele de expirare, și programează mai multe mașini odată.</p>
+          <a class="btn" href="/fleet/">Portal flote</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="reminder">
+      <div class="wrap">
+        <div class="card grid-2">
+          <div class="stack">
+            <h2>Nu mai uita de ITP</h2>
+            <p class="muted">Lasă numărul mașinii și data de expirare. Îți trimitem gratuit un SMS cu 30 de zile și cu 7 zile înainte.
+              Circulația cu ITP expirat se sancționează cu amendă și reținerea certificatului de înmatriculare.</p>
+            <p class="muted small">Preferi o aplicație? Folosește <a href="/tracker/">ITP Tracker</a> pentru ITP, RCA, rovinietă și CASCO.</p>
+          </div>
+          <form id="reminderForm" class="stack" novalidate>
+            <div class="fields">
+              <label>Număr de înmatriculare *
+                <input name="plate" required placeholder="SV 12 ABC" maxlength="15">
+              </label>
+              <label>ITP-ul expiră pe *
+                <input name="itpExpiry" type="date" required>
+              </label>
+              <label>Telefon mobil *
+                <input name="phone" type="tel" required placeholder="07xx xxx xxx">
+              </label>
+            </div>
+            <label class="check">
+              <input type="checkbox" name="consent" required>
+              <span>Sunt de acord să primesc SMS-uri de reminder de la MISEDA INSPECT.</span>
+            </label>
+            <p class="error" id="reminderError" hidden></p>
+            <div class="row"><button class="btn primary" type="submit">Activează reminderul</button></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span><strong>MISEDA INSPECT S.R.L.</strong> · Stație ITP autorizată RAR (SV096) · Str. Izvoarelor Nr. 2C, Rădăuți, jud. Suceava</span>
+      <span>ITP pentru șoferii din Rădăuți, Siret, Vicovu de Sus, Milișăuți, Marginea, Arbore, Horodnic, Putna și Gura Humorului.</span>
+      <span><a href="https://misedainspectsrl.ro/confidentialitate">Confidențialitate</a> · <a href="/fleet/">Portal flote</a> · <a href="/admin/">Administrare</a></span>
+    </div>
+  </footer>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/site.js"></script>
+</body>
+</html>
