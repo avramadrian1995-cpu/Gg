@@ -18,6 +18,7 @@
   ],
   "shortcuts": [
     { "name": "Programare ITP", "url": "/#programare", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Contul meu", "url": "/cont/", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
     { "name": "ITP Tracker", "url": "/tracker/", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
     { "name": "Portal flote", "url": "/fleet/", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
   ]

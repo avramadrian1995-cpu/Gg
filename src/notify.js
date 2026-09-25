@@ -106,12 +106,15 @@ function providerFromEnv(env = process.env, log = console.log) {
 async function flushOutbox(db, send, limit = 50) {
   const rows = db.prepare("SELECT * FROM outbox WHERE status = 'queued' ORDER BY id LIMIT ?").all(limit);
   const ok = db.prepare("UPDATE outbox SET status = 'sent', sent_at = datetime('now'), error = NULL WHERE id = ?");
+  // Login codes are not kept readable once sent.
+  const redact = db.prepare("UPDATE outbox SET body = 'Cod de autentificare (ascuns)' WHERE id = ? AND kind = 'login_code'");
   const fail = db.prepare("UPDATE outbox SET status = 'failed', error = ? WHERE id = ?");
   let sent = 0;
   for (const msg of rows) {
     try {
       await send(msg);
       ok.run(msg.id);
+      redact.run(msg.id);
       sent++;
     } catch (err) {
       fail.run(String(err.message || err).slice(0, 300), msg.id);

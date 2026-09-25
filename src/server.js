@@ -3,6 +3,8 @@
 const path = require('node:path');
 const express = require('express');
 const { openDb, getSettings, saveSettings, tx } = require('./db');
+const photos = require('./photos');
+const clientAuth = require('./client-auth');
 const auth = require('./auth');
 const itp = require('./itp');
 const notify = require('./notify');
@@ -156,7 +158,7 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
   // CSRF defence: state-changing API calls must be JSON (forms can't send it cross-site
   // without a CORS preflight), and session cookies are SameSite=Lax.
   app.use('/api', (req, res, next) => {
-    if (!['GET', 'HEAD'].includes(req.method) && !req.is('application/json')) {
+    if (!['GET', 'HEAD', 'DELETE'].includes(req.method) && !req.is('application/json') && !req.is('image/*')) {
       return res.status(415).json({ error: 'Cererea trebuie trimisă ca JSON.' });
     }
     next();
@@ -354,9 +356,9 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
     if (result === 'admis' && !itp.isDate(validUntil)) fail(400, 'Introduceți data până la care este valabil ITP-ul.');
     const price = req.body.price === '' || req.body.price == null ? null : Number(req.body.price);
     const s = getSettings(db);
-    tx(db, () => {
+    const inspectionId = tx(db, () => {
       const today = itp.nowLocal().date;
-      db.prepare(`INSERT INTO inspections (vehicle_id, booking_id, date, result, valid_until, price, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      const ins = db.prepare(`INSERT INTO inspections (vehicle_id, booking_id, date, result, valid_until, price, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(b.vehicle_id, b.id, today, result, validUntil, Number.isFinite(price) ? price : null, str(req.body.notes, 300));
       db.prepare("UPDATE bookings SET status = 'done' WHERE id = ?").run(b.id);
       if (validUntil) db.prepare('UPDATE vehicles SET itp_expiry = ? WHERE id = ?').run(validUntil, b.vehicle_id);
@@ -367,23 +369,27 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
           kind: 'review_request', ...notify.templates.reviewRequest(s, v),
         });
       }
+      return Number(ins.lastInsertRowid);
     });
     kick();
-    res.json({ ok: true });
+    res.json({ ok: true, inspectionId });
   }));
 
   admin.get('/vehicles', (req, res) => {
     const q = `%${str(req.query.q, 60).toUpperCase()}%`;
+    const compact = `%${str(req.query.q, 60).toUpperCase().replace(/[^A-Z0-9]/g, '')}%`;
+    const phoneDigits = itp.normalizePhone(req.query.q);
+    const phoneQ = phoneDigits ? `%${phoneDigits}%` : null; // NULL never matches
     const today = itp.nowLocal().date;
     const expiring = Number(req.query.expiring) || 0;
     const rows = db.prepare(`
       SELECT v.*, c.name AS company_name,
         (SELECT MAX(date) FROM inspections i WHERE i.vehicle_id = v.id) AS last_inspection
       FROM vehicles v LEFT JOIN companies c ON c.id = v.company_id
-      WHERE (UPPER(v.plate) LIKE ? OR UPPER(v.owner_name) LIKE ? OR v.phone LIKE ? OR UPPER(COALESCE(c.name, '')) LIKE ?)
+      WHERE (REPLACE(v.plate, ' ', '') LIKE ? OR UPPER(v.owner_name) LIKE ? OR v.phone LIKE ? OR UPPER(COALESCE(c.name, '')) LIKE ?)
         ${expiring ? 'AND v.itp_expiry BETWEEN ? AND ?' : ''}
       ORDER BY v.itp_expiry IS NULL, v.itp_expiry LIMIT 500
-    `).all(q, q, q, q, ...(expiring ? [today, itp.addDays(today, expiring)] : []));
+    `).all(compact, q, phoneQ, q, ...(expiring ? [today, itp.addDays(today, expiring)] : []));
     res.json({ vehicles: rows.map((v) => ({ ...v, ...vehicleStatus(v, today) })) });
   });
 
@@ -417,7 +423,9 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
   admin.get('/outbox', (req, res) => {
     const status = ['queued', 'sent', 'failed'].includes(req.query.status) ? req.query.status : null;
     const rows = db.prepare(`
-      SELECT o.*, v.plate FROM outbox o LEFT JOIN vehicles v ON v.id = o.vehicle_id
+      SELECT o.id, o.channel, o.recipient, o.kind, o.status, o.error, o.created_at, o.sent_at, v.plate,
+        CASE WHEN o.kind = 'login_code' THEN 'Cod de autentificare (ascuns)' ELSE o.body END AS body
+      FROM outbox o LEFT JOIN vehicles v ON v.id = o.vehicle_id
       ${status ? 'WHERE o.status = ?' : ''} ORDER BY o.id DESC LIMIT 200
     `).all(...(status ? [status] : []));
     res.json({ messages: rows });
@@ -511,6 +519,41 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
     res.json({ ok: true });
   }));
 
+  // Full file for one vehicle: bookings, inspections with photos, messages.
+  admin.get('/vehicles/:id', (req, res) => {
+    const v = db.prepare(`SELECT v.*, c.name AS company_name FROM vehicles v LEFT JOIN companies c ON c.id = v.company_id WHERE v.id = ?`)
+      .get(req.params.id);
+    if (!v) return res.status(404).json({ error: 'Vehiculul nu există.' });
+    const today = itp.nowLocal().date;
+    const inspections = db.prepare('SELECT * FROM inspections WHERE vehicle_id = ? ORDER BY date DESC, id DESC').all(v.id);
+    const pics = photos.listFor(db, inspections.map((i) => i.id));
+    res.json({
+      vehicle: { ...v, ...vehicleStatus(v, today) },
+      inspections: inspections.map((i) => ({ ...i, photos: pics[i.id] || [] })),
+      bookings: db.prepare('SELECT id, ref, date, time, service, status, source, contact_name, contact_phone FROM bookings WHERE vehicle_id = ? ORDER BY date DESC, time DESC LIMIT 50').all(v.id),
+      messages: db.prepare('SELECT id, kind, channel, recipient, status, created_at FROM outbox WHERE vehicle_id = ? ORDER BY id DESC LIMIT 50').all(v.id),
+    });
+  });
+
+  admin.post('/inspections/:id/photos', express.raw({ type: 'image/*', limit: photos.MAX_BYTES }), h((req, res) => {
+    const inspection = db.prepare('SELECT * FROM inspections WHERE id = ?').get(req.params.id);
+    if (!inspection) fail(404, 'Inspecția nu există.');
+    if (!Buffer.isBuffer(req.body) || !req.body.length) fail(400, 'Trimiteți o poză.');
+    try {
+      res.status(201).json(photos.save(db, inspection, req.body));
+    } catch (err) {
+      if (err.status) fail(err.status, err.message);
+      throw err;
+    }
+  }));
+
+  admin.delete('/photos/:id', h((req, res) => {
+    const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(req.params.id);
+    if (!photo) fail(404, 'Poza nu există.');
+    photos.remove(db, photo);
+    res.json({ ok: true });
+  }));
+
   app.use('/api/admin', admin);
 
   // ----- fleet -----
@@ -528,10 +571,12 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
                    ORDER BY b.date, b.time LIMIT 1) AS next_booking_id
       FROM vehicles v WHERE v.company_id = ? ORDER BY v.itp_expiry IS NULL, v.itp_expiry
     `).all(today, today, cid).map((v) => ({ ...v, ...vehicleStatus(v, today) }));
-    const history = db.prepare(`
-      SELECT i.date, i.result, i.valid_until, i.price, v.plate FROM inspections i JOIN vehicles v ON v.id = i.vehicle_id
+    const rows = db.prepare(`
+      SELECT i.id, i.date, i.result, i.valid_until, i.price, v.plate FROM inspections i JOIN vehicles v ON v.id = i.vehicle_id
       WHERE v.company_id = ? ORDER BY i.date DESC LIMIT 50
     `).all(cid);
+    const pics = photos.listFor(db, rows.map((r) => r.id));
+    const history = rows.map((r) => ({ ...r, photos: pics[r.id] || [] }));
     res.json({ company: { id: cid, name: req.user.company_name }, today, vehicles, history });
   });
 
@@ -606,6 +651,109 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
 
   app.use('/api/fleet', fleet);
 
+  // ----- customers (login by SMS code) -----
+
+  // Vehicles a customer sees: private cars with their phone, or that they booked.
+  const clientVehicleIds = (phone) => db.prepare(`
+    SELECT id FROM vehicles WHERE company_id IS NULL
+      AND (phone = ? OR id IN (SELECT vehicle_id FROM bookings WHERE contact_phone = ?))
+  `).all(phone, phone).map((r) => r.id);
+
+  const codeLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
+  const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15 });
+
+  app.post('/api/client/code', codeLimit, h((req, res) => {
+    const phone = itp.normalizePhone(req.body.phone);
+    if (!itp.isMobile(phone)) fail(400, 'Introduceți un număr de mobil valid, de ex. 0745 123 456.');
+    let code;
+    try {
+      code = clientAuth.requestCode(db, phone);
+    } catch (err) {
+      if (err.status) fail(err.status, err.message);
+      throw err;
+    }
+    if (code) {
+      notify.queue(db, {
+        dedupeKey: `login:${phone}:${Date.now()}`, vehicleId: null, phone, kind: 'login_code',
+        subject: 'Cod de autentificare', body: `Codul tău MISEDA ITP: ${code}. Expiră în 10 minute. Nu îl da nimănui.`,
+        sms: `Codul tau MISEDA ITP: ${code}. Expira in 10 minute. Nu il da nimanui.`,
+      });
+      kick();
+    }
+    // Same answer either way, so the form can't be used to test which numbers are customers.
+    res.json({ ok: true });
+  }));
+
+  app.post('/api/client/login', loginLimit, h((req, res) => {
+    const phone = itp.normalizePhone(req.body.phone);
+    let session;
+    try {
+      session = clientAuth.verifyCode(db, phone, req.body.code);
+    } catch (err) {
+      if (err.status) fail(err.status, err.message);
+      throw err;
+    }
+    res.cookie(clientAuth.COOKIE, session.token, {
+      httpOnly: true, sameSite: 'lax', maxAge: session.maxAge, path: '/', secure: process.env.COOKIE_SECURE === '1',
+    });
+    res.json({ ok: true });
+  }));
+
+  app.post('/api/client/logout', (req, res) => {
+    clientAuth.logout(db, req);
+    res.clearCookie(clientAuth.COOKIE, { path: '/' });
+    res.json({ ok: true });
+  });
+
+  const requireClient = (req, res, next) => {
+    req.clientPhone = clientAuth.clientPhone(db, req);
+    if (!req.clientPhone) return res.status(401).json({ error: 'Autentificați-vă cu numărul de telefon.' });
+    next();
+  };
+
+  app.get('/api/client/overview', requireClient, (req, res) => {
+    const ids = clientVehicleIds(req.clientPhone);
+    const today = itp.nowLocal().date;
+    const s = getSettings(db);
+    const vehicles = ids.map((id) => {
+      const v = db.prepare('SELECT id, plate, model, year, category, itp_expiry, reminder_consent FROM vehicles WHERE id = ?').get(id);
+      const inspections = db.prepare('SELECT id, date, result, valid_until, price FROM inspections WHERE vehicle_id = ? ORDER BY date DESC, id DESC').all(id);
+      const pics = photos.listFor(db, inspections.map((i) => i.id));
+      const bookings = db.prepare(`SELECT id, ref, date, time, service, status FROM bookings WHERE vehicle_id = ? AND contact_phone = ?
+        ORDER BY date DESC, time DESC LIMIT 20`).all(id, req.clientPhone)
+        .map((b) => ({ ...b, serviceName: serviceFor(s, b.service).name }));
+      return { ...v, ...vehicleStatus(v, today), inspections: inspections.map((i) => ({ ...i, photos: pics[i.id] || [] })), bookings };
+    });
+    res.json({ phone: req.clientPhone, today, vehicles });
+  });
+
+  app.post('/api/client/bookings/:id/cancel', requireClient, h((req, res) => {
+    const r = db.prepare(`UPDATE bookings SET status = 'cancelled' WHERE id = ? AND contact_phone = ? AND status = 'confirmed' AND date >= ?`)
+      .run(req.params.id, req.clientPhone, itp.nowLocal().date);
+    if (!r.changes) fail(404, 'Programarea nu poate fi anulată.');
+    res.json({ ok: true });
+  }));
+
+  app.patch('/api/client/vehicles/:id', requireClient, h((req, res) => {
+    const id = Number(req.params.id);
+    if (!clientVehicleIds(req.clientPhone).includes(id)) fail(404, 'Vehiculul nu există.');
+    db.prepare('UPDATE vehicles SET reminder_consent = ? WHERE id = ?').run(req.body.reminders ? 1 : 0, id);
+    res.json({ ok: true });
+  }));
+
+  // Photos: station staff, the fleet that owns the vehicle, or its customer.
+  app.get('/api/photos/:id', (req, res) => {
+    const photo = db.prepare('SELECT p.*, v.company_id FROM photos p JOIN vehicles v ON v.id = p.vehicle_id WHERE p.id = ?').get(req.params.id);
+    const phone = clientAuth.clientPhone(db, req);
+    const allowed = photo && (
+      req.user?.role === 'admin'
+      || (req.user?.role === 'fleet' && photo.company_id === req.user.company_id)
+      || (phone && clientVehicleIds(phone).includes(photo.vehicle_id))
+    );
+    if (!allowed) return res.status(404).json({ error: 'Poza nu există.' });
+    res.set('Cache-Control', 'private, max-age=86400').type(photo.mime).sendFile(photos.filePath(photo));
+  });
+
   app.use('/api', (req, res) => res.status(404).json({ error: 'Adresă API necunoscută.' }));
 
   app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
@@ -614,6 +762,7 @@ function createApp(db, { send = notify.providerFromEnv(), log = console.log } = 
   app.use((err, req, res, next) => {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON invalid.' });
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Fișierul este prea mare (maxim 8 MB).' });
     log(err);
     res.status(500).json({ error: 'Eroare internă. Încercați din nou.' });
   });

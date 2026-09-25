@@ -66,7 +66,7 @@ async function load() {
 
   $('#historyRows').innerHTML = data.history.length ? data.history.map((h) => `<tr>
       <td class="num">${fmtDate(h.date)}</td>
-      <td>${plate(h.plate)}</td>
+      <td>${plate(h.plate)}${photoGrid(h.photos)}</td>
       <td>${h.result === 'admis' ? '<span class="chip ok">admis</span>' : '<span class="chip bad">respins</span>'}</td>
       <td class="num">${h.valid_until ? fmtDate(h.valid_until) : '—'}</td>
       <td class="num">${h.price != null ? `${h.price} lei` : '—'}</td>

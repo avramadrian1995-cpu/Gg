@@ -86,6 +86,34 @@ CREATE TABLE IF NOT EXISTS inspections (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- AUTOINCREMENT: ids are never reused, because photo URLs (/api/photos/<id>)
+-- are cached by browsers and a reused id would show a deleted picture.
+CREATE TABLE IF NOT EXISTS photos (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+  vehicle_id    INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  file          TEXT NOT NULL UNIQUE,
+  mime          TEXT NOT NULL,
+  size          INTEGER NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS photos_inspection ON photos(inspection_id);
+
+-- Customer login by SMS code (no password).
+CREATE TABLE IF NOT EXISTS login_codes (
+  phone      TEXT PRIMARY KEY,
+  code_hash  TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  sent_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS client_sessions (
+  token      TEXT PRIMARY KEY,
+  phone      TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS outbox (
   id         INTEGER PRIMARY KEY,
   dedupe_key TEXT NOT NULL UNIQUE,
@@ -139,7 +167,11 @@ const DEFAULT_SETTINGS = {
   reviewRequest: true,
 };
 
-function openDb(file = process.env.DB_FILE || path.join(__dirname, '..', 'data', 'miseda.db')) {
+function dataDir() {
+  return process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+}
+
+function openDb(file = process.env.DB_FILE || path.join(dataDir(), 'miseda.db')) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -177,4 +209,4 @@ function tx(db, fn) {
   }
 }
 
-module.exports = { openDb, getSettings, saveSettings, tx, DEFAULT_SETTINGS };
+module.exports = { openDb, getSettings, saveSettings, tx, dataDir, DEFAULT_SETTINGS };

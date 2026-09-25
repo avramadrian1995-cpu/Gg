@@ -1,6 +1,11 @@
 'use strict';
 
 const test = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'miseda-test-'));
 const assert = require('node:assert/strict');
 const { openDb } = require('../src/db');
 const { createApp } = require('../src/server');
@@ -16,11 +21,15 @@ async function setup() {
   const base = `http://127.0.0.1:${server.address().port}`;
   const client = () => {
     let cookie = '';
-    return async (path, { method = 'GET', body } = {}) => {
-      const res = await fetch(base + path, {
+    return async (url, { method = 'GET', body, raw, type } = {}) => {
+      const res = await fetch(base + url, {
         method,
-        headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(raw !== undefined ? { 'content-type': type } : {}),
+          ...(cookie ? { cookie } : {}),
+        },
+        body: raw !== undefined ? raw : body !== undefined ? JSON.stringify(body) : undefined,
       });
       const set = res.headers.get('set-cookie');
       if (set) cookie = set.split(';')[0];
@@ -191,4 +200,97 @@ test('fleet: isolation between companies and bulk booking', async (t) => {
   assert.equal(r.status, 201);
   assert.equal(r.data.created.length, 3);
   assert.equal(new Set(r.data.created.map((c) => c.time)).size, 3);
+});
+
+// Smallest valid JPEG header bytes are enough for the type check.
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 1)]);
+
+test('photos: upload, type check, access control, delete', async (t) => {
+  const { client, sent, close } = await setup();
+  t.after(close);
+  const admin = client();
+  await admin('/api/auth/login', { method: 'POST', body: { email: 'admin@test.ro', password: 'admin-password' } });
+  const { date, time } = await firstFreeSlot(admin);
+  await admin('/api/admin/bookings', { method: 'POST', body: { plate: 'SV 50 PIC', name: 'Dan', phone: '0740000050', date, time } });
+  const b = (await admin(`/api/admin/bookings?from=${date}&to=${date}`)).data.bookings[0];
+  const done = await admin(`/api/admin/bookings/${b.id}/complete`, { method: 'POST', body: { result: 'admis', validUntil: '2028-01-01' } });
+  const inspectionId = done.data.inspectionId;
+  assert.ok(inspectionId);
+
+  let r = await admin(`/api/admin/inspections/${inspectionId}/photos`, { method: 'POST', raw: Buffer.from('not an image'), type: 'image/jpeg' });
+  assert.equal(r.status, 415);
+  r = await admin(`/api/admin/inspections/${inspectionId}/photos`, { method: 'POST', raw: JPEG, type: 'image/jpeg' });
+  assert.equal(r.status, 201);
+  const photoId = r.data.id;
+
+  // Anonymous and unrelated fleet can't see it.
+  assert.equal((await client()(`/api/photos/${photoId}`)).status, 404);
+  assert.equal((await admin(`/api/photos/${photoId}`)).status, 200);
+
+  // Anonymous upload is refused.
+  assert.equal((await client()(`/api/admin/inspections/${inspectionId}/photos`, { method: 'POST', raw: JPEG, type: 'image/jpeg' })).status, 401);
+
+  // The customer who booked sees it after SMS login.
+  const customer = client();
+  await customer('/api/client/code', { method: 'POST', body: { phone: '0740 000 050' } });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const codeMsg = sent.find((m) => m.kind === 'login_code');
+  const code = codeMsg.body.match(/\d{6}/)[0];
+  assert.equal((await customer('/api/client/login', { method: 'POST', body: { phone: '0740000050', code } })).status, 200);
+  const overview = await customer('/api/client/overview');
+  assert.equal(overview.data.vehicles[0].plate, 'SV 50 PIC');
+  assert.equal(overview.data.vehicles[0].inspections[0].photos.length, 1);
+  assert.equal((await customer(`/api/photos/${photoId}`)).status, 200);
+
+  // Vehicle file for the station, then delete.
+  const file = await admin(`/api/admin/vehicles/${b.vehicle_id}`);
+  assert.equal(file.data.inspections[0].photos.length, 1);
+  assert.equal((await admin(`/api/admin/photos/${photoId}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await admin(`/api/photos/${photoId}`)).status, 404);
+  // A new photo never gets the deleted photo's id (its URL may be cached).
+  r = await admin(`/api/admin/inspections/${inspectionId}/photos`, { method: 'POST', raw: JPEG, type: 'image/jpeg' });
+  assert.ok(r.data.id > photoId);
+});
+
+test('customer login: same answer for unknown numbers, wrong codes, attempt limit', async (t) => {
+  const { client, sent, db, close } = await setup();
+  t.after(close);
+  const call = client();
+  const { date, time } = await firstFreeSlot(call);
+  await call('/api/public/bookings', { method: 'POST', body: { plate: 'SV 60 CLI', name: 'Ana', phone: '0740000060', date, time } });
+
+  // Unknown number: same response, no SMS.
+  assert.equal((await client()('/api/client/code', { method: 'POST', body: { phone: '0749999999' } })).status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(sent.filter((m) => m.kind === 'login_code').length, 0);
+
+  assert.equal((await call('/api/client/code', { method: 'POST', body: { phone: '0740000060' } })).status, 200);
+  // Resend within a minute is refused.
+  assert.equal((await call('/api/client/code', { method: 'POST', body: { phone: '0740000060' } })).status, 429);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const code = sent.find((m) => m.kind === 'login_code').body.match(/\d{6}/)[0];
+  const wrong = code === '000000' ? '111111' : '000000';
+
+  // The code is hidden in the station's message log once sent.
+  assert.match(db.prepare("SELECT body FROM outbox WHERE kind = 'login_code'").get().body, /ascuns/);
+
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await call('/api/client/login', { method: 'POST', body: { phone: '0740000060', code: wrong } })).status, 401);
+  }
+  // After 5 wrong attempts even the right code is refused.
+  assert.equal((await call('/api/client/login', { method: 'POST', body: { phone: '0740000060', code } })).status, 401);
+  assert.equal((await call('/api/client/overview')).status, 401);
+});
+
+test('admin search finds plates typed without spaces', async (t) => {
+  const { client, close } = await setup();
+  t.after(close);
+  const admin = client();
+  await admin('/api/auth/login', { method: 'POST', body: { email: 'admin@test.ro', password: 'admin-password' } });
+  const { date, time } = await firstFreeSlot(admin);
+  await admin('/api/admin/bookings', { method: 'POST', body: { plate: 'SV 70 SRC', name: 'Radu', phone: '0740000070', date, time } });
+  assert.equal((await admin('/api/admin/vehicles?q=sv70src')).data.vehicles.length, 1);
+  assert.equal((await admin('/api/admin/vehicles?q=0740 000 070')).data.vehicles.length, 1);
+  assert.equal((await admin('/api/admin/vehicles?q=radu')).data.vehicles.length, 1);
+  assert.equal((await admin('/api/admin/vehicles?q=nimic')).data.vehicles.length, 0);
 });

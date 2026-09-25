@@ -2,10 +2,10 @@
 
 // Offline support: pages and assets come from the network when possible and
 // fall back to the cache; API calls always go to the network (live slots).
-const CACHE = 'miseda-v1';
+const CACHE = 'miseda-v2';
 const SHELL = [
   '/', '/css/app.css', '/js/common.js', '/js/site.js', '/offline.html',
-  '/tracker/', '/tracker/app.js', '/tracker/styles.css',
+  '/tracker/', '/tracker/app.js', '/tracker/styles.css', '/cont/', '/js/account.js',
   '/icons/icon-192.png', '/manifest.webmanifest',
 ];
 

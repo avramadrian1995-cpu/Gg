@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Contul meu – MISEDA ITP Rădăuți</title>
+  <meta name="description" content="Vezi mașinile tale, programările, istoricul ITP și pozele de la inspecție. Intri cu numărul de telefon, fără parolă.">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f3d7a">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">
+        <span class="logo-mark">ITP</span>
+        <span>MISEDA INSPECT<small>Contul meu</small></span>
+      </a>
+      <nav class="nav">
+        <a class="cta" href="/#programare">Programează-te</a>
+        <button id="logoutBtn" type="button" hidden>Ieșire</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap app-main">
+    <div id="loginView" class="login stack" hidden>
+      <form class="card stack" id="phoneForm" novalidate>
+        <h2>Intră în cont</h2>
+        <p class="muted">Folosește numărul de telefon cu care te-ai programat. Îți trimitem un cod prin SMS, fără parolă.</p>
+        <label>Telefon mobil <input name="phone" type="tel" autocomplete="tel" placeholder="07xx xxx xxx" required></label>
+        <p class="error" id="phoneError" hidden></p>
+        <button class="btn primary" type="submit">Trimite codul</button>
+      </form>
+      <form class="card stack" id="codeForm" novalidate hidden>
+        <h2>Introdu codul</h2>
+        <p class="muted" id="codeInfo"></p>
+        <label>Cod din SMS
+          <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" placeholder="123456" required>
+        </label>
+        <p class="error" id="codeError" hidden></p>
+        <div class="row">
+          <button class="btn ghost" type="button" id="changePhone">Alt număr</button>
+          <button class="btn primary" type="submit">Intră</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="app" class="stack" hidden>
+      <div class="spread">
+        <h1>Mașinile mele</h1>
+        <span class="muted small" id="phoneLabel"></span>
+      </div>
+      <div id="vehicles" class="stack"></div>
+    </div>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/account.js"></script>
+  <script src="/js/pwa.js"></script>
+</body>
+</html>

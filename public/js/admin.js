@@ -12,7 +12,7 @@ const STATUS = {
 };
 const SOURCE = { online: 'online', admin: 'telefon', fleet: 'flotă' };
 const KIND = {
-  booking_confirmed: 'Confirmare', booking_tomorrow: 'Programare mâine', itp_expiring: 'ITP expiră', review_request: 'Recenzie',
+  booking_confirmed: 'Confirmare', booking_tomorrow: 'Programare mâine', itp_expiring: 'ITP expiră', review_request: 'Recenzie', login_code: 'Cod login',
 };
 
 // ---------- auth ----------
@@ -164,14 +164,26 @@ async function completeBooking(b) {
       </div>
       <p class="small muted">Sugestie: ${b.suggestedMonths} luni${b.year ? ` (an fabricație ${b.year})` : ''}. Verifică pe certificat și corectează dacă e cazul.</p>
       <label>Observații <input name="notes" maxlength="300"></label>
+      <label>Poze ITP (opțional) – fă poze sau alege din galerie
+        <input type="file" name="photos" accept="image/*" capture="environment" multiple>
+      </label>
       <div class="row">
         <button class="btn ghost" value="cancel">Renunță</button>
         <button class="btn primary" value="ok">Salvează</button>
       </div>
     </form>`);
   if (!data) return;
-  await api(`/api/admin/bookings/${b.id}/complete`, { method: 'POST', body: data });
-  toast(data.result === 'admis' ? `ITP înregistrat. Următorul reminder pentru ${b.plate} este programat automat.` : 'Inspecție respinsă înregistrată.');
+  const files = data.photos || [];
+  delete data.photos;
+  const { inspectionId } = await api(`/api/admin/bookings/${b.id}/complete`, { method: 'POST', body: data });
+  let photoNote = '';
+  if (files.length) {
+    toast(`Se încarcă ${files.length} ${files.length === 1 ? 'poză' : 'poze'}…`);
+    const r = await uploadPhotos(inspectionId, files);
+    photoNote = ` ${r.ok} ${r.ok === 1 ? 'poză salvată' : 'poze salvate'}.`;
+    if (r.errors.length) photoNote += ` Nu s-au încărcat: ${r.errors.join('; ')}`;
+  }
+  toast((data.result === 'admis' ? `ITP înregistrat pentru ${b.plate}. Reminderul următor este programat automat.` : 'Inspecție respinsă înregistrată.') + photoNote);
 }
 
 $('#newBookingBtn').addEventListener('click', async () => {
@@ -235,7 +247,8 @@ async function loadVehicles() {
       <td>${v.itp_expiry ? `${fmtDate(v.itp_expiry)}<div>${itpChip(v.itpDays)}</div>` : '<span class="muted">—</span>'}</td>
       <td class="num">${v.last_inspection ? fmtDate(v.last_inspection) : '—'}</td>
       <td>${v.reminder_consent ? '<span class="chip ok">da</span>' : '<span class="chip none">nu</span>'}</td>
-      <td><button class="btn sm" data-edit="${v.id}">Editează</button></td>
+      <td><div class="row"><button class="btn sm primary" data-file="${v.id}">Dosar</button>
+        <button class="btn sm" data-edit="${v.id}">Editează</button></div></td>
     </tr>`).join('') : '<tr><td colspan="7" class="empty">Niciun vehicul găsit.</td></tr>';
 }
 
@@ -243,6 +256,8 @@ $('#vehicleSearch').addEventListener('input', () => { clearTimeout(searchTimer);
 $('#vehicleFilter').addEventListener('change', loadVehicles);
 
 $('#vehicleRows').addEventListener('click', async (e) => {
+  const fileBtn = e.target.closest('[data-file]');
+  if (fileBtn) { openVehicleFile(fileBtn.dataset.file); return; }
   const btn = e.target.closest('[data-edit]');
   if (!btn) return;
   const v = vehicles.find((x) => String(x.id) === btn.dataset.edit);
@@ -285,6 +300,90 @@ $('#vehicleRows').addEventListener('click', async (e) => {
   } catch (err) {
     toast(err.message);
   }
+});
+
+// ---------- vehicle file (search result detail) ----------
+
+const BOOKING_STATUS = { confirmed: 'confirmată', done: 'efectuată', no_show: 'neprezentat', cancelled: 'anulată' };
+
+async function openVehicleFile(id) {
+  let data;
+  try {
+    data = await api(`/api/admin/vehicles/${id}`);
+  } catch (err) {
+    toast(err.message);
+    return;
+  }
+  const v = data.vehicle;
+  const dlg = document.createElement('dialog');
+  dlg.className = 'wide';
+  const render = () => {
+    dlg.innerHTML = `
+      <div class="spread"><h3>${plate(v.plate)} ${esc([v.model, v.year, v.category].filter(Boolean).join(' · '))}</h3>
+        <button class="btn sm ghost" data-close>Închide</button></div>
+      <div class="file-section">
+        <div class="grid-3">
+          <div><div class="small muted">Proprietar</div>${esc(v.company_name || v.owner_name || '—')}</div>
+          <div><div class="small muted">Contact</div>${esc(v.phone || '—')}${v.email ? `<br>${esc(v.email)}` : ''}</div>
+          <div><div class="small muted">ITP expiră</div>${v.itp_expiry ? `${fmtDate(v.itp_expiry)} ${itpChip(v.itpDays)}` : '—'}</div>
+        </div>
+      </div>
+      <div class="file-section">
+        <h3>Inspecții și poze</h3>
+        ${data.inspections.length ? data.inspections.map((i) => `<div class="insp">
+          <div class="spread"><strong>${fmtDate(i.date)}</strong>
+            ${i.result === 'admis' ? '<span class="chip ok">admis</span>' : '<span class="chip bad">respins</span>'}</div>
+          <span class="small muted">${i.valid_until ? `Valabil până la ${fmtDate(i.valid_until)}` : ''}${i.price != null ? ` · ${i.price} lei` : ''}${i.notes ? ` · ${esc(i.notes)}` : ''}</span>
+          ${photoGrid(i.photos, { deletable: true })}
+          <label class="small">Adaugă poze
+            <input type="file" accept="image/*" capture="environment" multiple data-upload="${i.id}"></label>
+        </div>`).join('') : '<p class="muted">Nicio inspecție înregistrată încă.</p>'}
+      </div>
+      <div class="file-section">
+        <h3>Programări</h3>
+        ${data.bookings.length ? `<div class="table-wrap"><table class="data"><tbody>${data.bookings.map((b) => `<tr>
+          <td class="num">${fmtDate(b.date)} ${esc(b.time)}</td><td>${esc(b.contact_name)}</td><td>${BOOKING_STATUS[b.status]}</td>
+          <td class="small muted">${SOURCE[b.source] || esc(b.source)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nicio programare.</p>'}
+      </div>
+      <div class="file-section">
+        <h3>Mesaje trimise</h3>
+        ${data.messages.length ? `<div class="table-wrap"><table class="data"><tbody>${data.messages.map((m) => `<tr>
+          <td class="num small">${esc(m.created_at.slice(0, 16))}</td><td>${KIND[m.kind] || esc(m.kind)}</td>
+          <td>${m.channel.toUpperCase()}</td><td>${{ queued: 'în așteptare', sent: 'trimis', failed: 'eșuat' }[m.status] || esc(m.status)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Niciun mesaj.</p>'}
+      </div>`;
+  };
+  render();
+  document.body.append(dlg);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-close]')) { dlg.close(); return; }
+    const del = e.target.closest('[data-del-photo]');
+    if (del) {
+      e.preventDefault();
+      if (!(await confirmDialog('Ștergi această poză?', 'Șterge poza'))) return;
+      await api(`/api/admin/photos/${del.dataset.delPhoto}`, { method: 'DELETE' });
+      data = await api(`/api/admin/vehicles/${id}`);
+      render();
+    }
+  });
+  dlg.addEventListener('change', async (e) => {
+    const input = e.target.closest('[data-upload]');
+    if (!input || !input.files.length) return;
+    toast('Se încarcă pozele…');
+    const r = await uploadPhotos(input.dataset.upload, [...input.files]);
+    toast(r.errors.length ? `Nu s-au încărcat: ${r.errors.join('; ')}` : `${r.ok} ${r.ok === 1 ? 'poză salvată' : 'poze salvate'}.`);
+    data = await api(`/api/admin/vehicles/${id}`);
+    render();
+  });
+  dlg.showModal();
+}
+
+// Header search: jumps to the vehicles tab with the query.
+$('#headerSearch').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  $('#vehicleSearch').value = e.target.value;
+  $('.tabs [data-tab="vehicles"]').click();
 });
 
 // ---------- companies ----------

@@ -117,6 +117,7 @@ $('#bookingForm').addEventListener('submit', async (e) => {
       <strong>Programare confirmată: ${fmtDate(booking.date, { weekday: true })}, ora ${booking.time}</strong>
       <span>${plate(booking.plate)} · Cod programare <strong>${esc(booking.ref)}</strong></span>
       <span class="muted">Ți-am trimis confirmarea prin SMS. Adu talonul, cartea de identitate a vehiculului (CIV) și RCA valabil.</span>
+      <span class="small">Vezi programarea și istoricul ITP oricând în <a href="/cont/">Contul meu</a>, cu numărul de telefon.</span>
       <span class="small">Dacă nu mai poți ajunge, anulează din <a href="${esc(manageUrl)}">pagina programării</a>
         sau sună la ${esc(state.info.station.phone)}.</span>`;
     form.reset();

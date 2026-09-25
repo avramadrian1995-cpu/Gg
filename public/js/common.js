@@ -97,7 +97,10 @@ function formDialog(html) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (e.submitter?.value === 'cancel') { dlg.close(); return; }
-      dlg.resolveWith = Object.fromEntries(new FormData(form));
+      const data = Object.fromEntries(new FormData(form));
+      // File inputs keep every selected file, not only the last one.
+      for (const input of $$('input[type=file]', form)) data[input.name] = [...input.files];
+      dlg.resolveWith = data;
       dlg.close();
     });
     $$('[value="cancel"]', dlg).forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); dlg.close(); }));
@@ -116,4 +119,44 @@ function confirmDialog(text, yes = 'Da') {
         <button class="btn primary" value="ok">${esc(yes)}</button>
       </div>
     </form>`).then((r) => r !== null);
+}
+
+// Shrinks a photo on the device (max 1600 px, JPEG) before uploading it,
+// so phone camera pictures of 4–8 MB become ~300 KB.
+async function shrinkImage(file, maxSide = 1600) {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.82));
+}
+
+async function uploadPhotos(inspectionId, files) {
+  let ok = 0;
+  const errors = [];
+  for (const file of files) {
+    try {
+      const blob = await shrinkImage(file);
+      const res = await fetch(`/api/admin/inspections/${inspectionId}/photos`, {
+        method: 'POST', headers: { 'content-type': blob.type || 'image/jpeg' }, body: blob, credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Încărcarea a eșuat.');
+      ok++;
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
+    }
+  }
+  return { ok, errors };
+}
+
+function photoGrid(photos, { deletable = false } = {}) {
+  if (!photos?.length) return '';
+  return `<div class="photos">${photos.map((p) => `<span class="photo">
+      <a href="${p.url}" target="_blank" rel="noopener"><img src="${p.url}" alt="Poză ITP" loading="lazy"></a>
+      ${deletable ? `<button type="button" class="photo-del" data-del-photo="${p.id}" aria-label="Șterge poza">×</button>` : ''}
+    </span>`).join('')}</div>`;
 }

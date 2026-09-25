@@ -8,6 +8,7 @@ Str. Izvoarelor Nr. 2C, Rădăuți.
 | Site public cu programare online | `/` | Șoferi |
 | Administrare stație | `/admin/` | Personalul stației |
 | Portal flote | `/fleet/` | Firme cu mai multe vehicule |
+| Contul meu | `/cont/` | Șoferi: intră cu telefonul și un cod prin SMS |
 | ITP Tracker | `/tracker/` | Șoferi (ITP, RCA, rovinietă, CASCO, date salvate în browser) |
 
 ## Ce face
@@ -22,7 +23,9 @@ Str. Izvoarelor Nr. 2C, Rădăuți.
 - Programările pe zile, cu starea ITP-ului actual al fiecărei mașini.
 - „Înregistrează ITP”: rezultat, valabilitate (sugerată după vechime și tip, editabilă), preț. Data expirării se salvează și reminderul următor pornește automat.
 - Programări prin telefon, marcare „nu a venit”, anulare.
-- Clienți și vehicule: căutare, filtru „expiră în 30/60 de zile”, editare, export CSV.
+- Căutare după număr (cu sau fără spații), nume, telefon sau firmă, din bara de sus. „Dosar” arată tot istoricul vehiculului: inspecții cu poze, programări, mesaje trimise.
+- Poze ITP: la „Înregistrează ITP” sau din dosar, direct cu camera telefonului. Pozele se micșorează pe telefon (~300 KB) înainte de încărcare. Maxim 12 pe inspecție.
+- Clienți și vehicule: filtru „expiră în 30/60 de zile”, editare, export CSV.
 - Flote: creare firmă și cont de acces.
 - Mesaje: toate SMS-urile / e-mailurile, cu status și reîncercare.
 - Setări: date stație, program pe zile, zile libere, durata intervalului, linii de inspecție, servicii și prețuri, zilele de reminder, link recenzie Google.
@@ -32,6 +35,11 @@ Str. Izvoarelor Nr. 2C, Rădăuți.
 - Toate vehiculele firmei cu data expirării ITP și status colorat.
 - Programare pentru mai multe vehicule odată: fiecare primește primul interval liber din ziua aleasă.
 - Istoric inspecții. Fiecare firmă vede doar vehiculele proprii.
+
+**Contul meu (șoferi)**
+- Autentificare fără parolă: numărul de telefon și un cod de 6 cifre prin SMS (valabil 10 minute, 5 încercări, un cod nou pe minut).
+- Mașinile clientului, programarea următoare (cu anulare), istoricul ITP cu pozele de la inspecție, pornire/oprire reminder.
+- Formularul răspunde la fel pentru numere necunoscute, ca să nu se poată afla cine e client. Codurile nu rămân vizibile în jurnalul de mesaje.
 
 **Remindere automate** (la fiecare 15 minute)
 - ITP care expiră peste 30, 7 și 1 zile (configurabil), doar pentru clienții cu acord și fără programare deja făcută.
@@ -69,7 +77,7 @@ docker run -d -p 3000:3000 -v miseda-data:/app/data \
   -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... -e PUBLIC_URL=https://... -e COOKIE_SECURE=1 -e TRUST_PROXY=1 miseda-itp
 ```
 
-Rulați în spatele unui reverse proxy cu HTTPS (Caddy, nginx). Faceți backup la fișierul `data/miseda.db`.
+Rulați în spatele unui reverse proxy cu HTTPS (Caddy, nginx). Faceți backup la tot folderul `data/` (baza de date `miseda.db` și pozele din `data/photos/`).
 
 ## Aplicația pe telefon
 
