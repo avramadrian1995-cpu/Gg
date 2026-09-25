@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ITP Tracker</title>
+  <meta name="description" content="Urmărește expirarea ITP, RCA și rovinietei pentru mașinile tale.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>ITP Tracker</h1>
+    <div class="topbar-actions">
+      <button id="exportBtn" class="ghost" type="button">Export</button>
+      <label class="ghost button-like">
+        Import
+        <input id="importInput" type="file" accept="application/json" hidden>
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary" class="summary" aria-live="polite"></section>
+
+    <section class="card">
+      <h2 id="formTitle">Adaugă mașină</h2>
+      <form id="vehicleForm" autocomplete="off">
+        <input type="hidden" id="vehicleId">
+        <div class="grid">
+          <label>Număr înmatriculare *
+            <input id="plate" required placeholder="B 123 ABC" maxlength="15">
+          </label>
+          <label>Marcă / model
+            <input id="model" placeholder="Dacia Logan" maxlength="40">
+          </label>
+          <label>An fabricație
+            <input id="year" type="number" min="1950" max="2100" placeholder="2015">
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>ITP</legend>
+          <div class="grid">
+            <label>Data ultimei inspecții
+              <input id="itpDone" type="date">
+            </label>
+            <label>Valabilitate
+              <select id="itpInterval">
+                <option value="1">1 an</option>
+                <option value="2" selected>2 ani</option>
+                <option value="3">3 ani (mașină nouă)</option>
+              </select>
+            </label>
+            <label>Expiră ITP
+              <input id="itpExpiry" type="date">
+            </label>
+          </div>
+          <p class="hint" id="itpHint">Completează data inspecției și valabilitatea, iar data expirării se calculează automat. O poți modifica manual.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Alte documente</legend>
+          <div class="grid">
+            <label>Expiră RCA
+              <input id="rcaExpiry" type="date">
+            </label>
+            <label>Expiră rovinieta
+              <input id="vignetteExpiry" type="date">
+            </label>
+            <label>Expiră CASCO
+              <input id="cascoExpiry" type="date">
+            </label>
+          </div>
+        </fieldset>
+
+        <label>Notițe
+          <input id="notes" maxlength="200" placeholder="Stație ITP, asigurător etc.">
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="primary" id="submitBtn">Salvează</button>
+          <button type="button" class="ghost" id="cancelBtn" hidden>Anulează</button>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <div class="list-head">
+        <h2>Mașinile mele</h2>
+        <label class="inline">Avertizare cu
+          <select id="warnDays">
+            <option value="7">7 zile</option>
+            <option value="14">14 zile</option>
+            <option value="30" selected>30 zile</option>
+            <option value="60">60 zile</option>
+          </select>
+          înainte
+        </label>
+      </div>
+      <div id="vehicleList" class="vehicle-list"></div>
+    </section>
+  </main>
+
+  <footer>
+    Datele sunt salvate doar în acest browser. Folosește Export pentru backup.
+    Intervalele ITP sugerate sunt orientative — verifică mereu certificatul ITP.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
