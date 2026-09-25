@@ -403,6 +403,7 @@ footer.site-footer .wrap { display: grid; gap: 6px; }
 .facts a, .hero a:not(.btn) { color: inherit; text-decoration: underline; }
 
 table.data td .row { flex-wrap: nowrap; gap: 6px; }
+table.data .btn { white-space: nowrap; }
 .history-title { margin: 28px 0 12px; }
 .stat .value.bad { color: var(--bad); }
 .stat .value.warn { color: var(--warn); }
