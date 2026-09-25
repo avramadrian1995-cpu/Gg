@@ -1,0 +1,48 @@
+plugins {
+    id "com.android.application"
+}
+
+def siteUrl = project.findProperty("siteUrl") ?: "https://programari.misedainspectsrl.ro"
+
+android {
+    namespace "ro.miseda.itp"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "ro.miseda.itp"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+        buildConfigField "String", "SITE_URL", "\"${siteUrl}\""
+        manifestPlaceholders = [siteHost: new URI(siteUrl).host]
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            // Cheia de semnare se dă prin variabile de mediu; fără ele se construiește doar varianta debug.
+            if (System.getenv("MISEDA_KEYSTORE")) {
+                storeFile file(System.getenv("MISEDA_KEYSTORE"))
+                storePassword System.getenv("MISEDA_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("MISEDA_KEY_ALIAS") ?: "miseda"
+                keyPassword System.getenv("MISEDA_KEY_PASSWORD") ?: System.getenv("MISEDA_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv("MISEDA_KEYSTORE")) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

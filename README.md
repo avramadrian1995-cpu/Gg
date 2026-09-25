@@ -71,6 +71,24 @@ docker run -d -p 3000:3000 -v miseda-data:/app/data \
 
 Rulați în spatele unui reverse proxy cu HTTPS (Caddy, nginx). Faceți backup la fișierul `data/miseda.db`.
 
+## Aplicația pe telefon
+
+**Instalare din browser (Android și iPhone).** Site-ul este o aplicație web instalabilă: pe Android apare „Instalează aplicația”,
+pe iPhone Share → „Adaugă pe ecranul principal”. Are iconiță, se deschide pe tot ecranul și are o pagină pentru lipsă de internet.
+
+**APK Android** (folderul `android/`). O aplicație nativă mică (fără biblioteci externe) care deschide platforma pe tot ecranul.
+Linkurile de telefon, hartă și alte site-uri se deschid în aplicațiile lor, iar linkurile din SMS se pot deschide direct în aplicație.
+
+```sh
+cd android
+echo "sdk.dir=/cale/catre/android-sdk" > local.properties
+gradle assembleDebug -PsiteUrl=https://adresa-unde-rulează-serverul
+# APK: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Pentru Google Play construiți varianta release semnată (`gradle bundleRelease`) cu cheia dată prin
+`MISEDA_KEYSTORE`, `MISEDA_KEYSTORE_PASSWORD`, `MISEDA_KEY_ALIAS`. Păstrați cheia în siguranță: fără ea nu mai puteți publica actualizări.
+
 ## SMS și e-mail
 
 Implicit (`NOTIFY_PROVIDER=log`) mesajele doar se afișează în consolă și apar în tabul Mesaje, ca să puteți testa fără costuri.

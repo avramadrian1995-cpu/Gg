@@ -1,0 +1,24 @@
+{
+  "name": "MISEDA ITP – Programări Rădăuți",
+  "short_name": "ITP Miseda",
+  "description": "Programează ITP online la MISEDA INSPECT Rădăuți și primește reminder înainte să expire.",
+  "id": "/",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ro",
+  "background_color": "#f3f5f8",
+  "theme_color": "#0f3d7a",
+  "categories": ["auto", "business", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Programare ITP", "url": "/#programare", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "ITP Tracker", "url": "/tracker/", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Portal flote", "url": "/fleet/", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}
