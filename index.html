@@ -102,9 +102,16 @@
   </main>
 
   <footer>
-    Datele sunt salvate doar în acest browser. Folosește Export pentru backup.
-    Intervalele ITP sugerate sunt orientative — verifică mereu certificatul ITP.
+    <span id="storageNote">Datele sunt salvate doar în acest browser. Folosește Export pentru backup.</span>
+    Intervalele ITP sugerate sunt orientative. Verifică mereu data de pe certificatul ITP.
   </footer>
+
+  <div id="confirmBar" class="bottom-bar" role="alertdialog" aria-labelledby="confirmText" hidden>
+    <span id="confirmText"></span>
+    <button type="button" id="confirmYes" class="primary">Da</button>
+    <button type="button" id="confirmNo" class="ghost">Renunță</button>
+  </div>
+  <div id="toast" class="bottom-bar" role="status" hidden></div>
 
   <script src="app.js"></script>
 </body>

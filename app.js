@@ -11,36 +11,11 @@ const DOCS = [
   { key: 'cascoExpiry', label: 'CASCO' },
 ];
 
+// When the page runs as a claude.ai artifact, `window.claude` exists and the
+// sandbox blocks plain downloads; .ics files are not an allowed save type there.
+const IN_CLAUDE = Boolean(window.claude?.use);
+
 const $ = (id) => document.getElementById(id);
-
-// ---------- storage ----------
-
-function loadVehicles() {
-  try {
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveVehicles() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
-  } catch {
-    // storage unavailable (private mode etc.) — keep working in memory
-  }
-}
-
-function loadWarnDays() {
-  try {
-    return Number(localStorage.getItem(WARN_KEY)) || 30;
-  } catch {
-    return 30;
-  }
-}
-
-let vehicles = loadVehicles();
 
 // ---------- dates ----------
 
@@ -62,6 +37,10 @@ function toInputDate(date) {
 function today() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function addDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 function daysUntil(str) {
@@ -93,6 +72,110 @@ function suggestedInterval(year) {
   return 1;
 }
 
+// ---------- storage ----------
+// Always kept in localStorage. Inside a claude.ai artifact it is also kept in
+// the viewer's private cloud document, so it follows them across devices.
+
+function exampleVehicle() {
+  const t = today();
+  const itpExpiry = addDays(t, 20);
+  return {
+    id: 'example',
+    example: true,
+    plate: 'B 01 XMP',
+    model: 'Dacia Logan',
+    year: 2016,
+    itpDone: toInputDate(addYears(itpExpiry, -2)),
+    itpInterval: '2',
+    itpExpiry: toInputDate(itpExpiry),
+    rcaExpiry: toInputDate(addDays(t, 140)),
+    vignetteExpiry: toInputDate(addDays(t, -3)),
+    cascoExpiry: '',
+    notes: 'Mașină de exemplu. Șterge-o după ce adaugi una reală.',
+  };
+}
+
+// Returns null when nothing was ever saved (first visit).
+function readLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return null;
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return null;
+  }
+}
+
+function loadWarnDays() {
+  try {
+    return Number(localStorage.getItem(WARN_KEY)) || 30;
+  } catch {
+    return 30;
+  }
+}
+
+let vehicles = readLocal() ?? [exampleVehicle()];
+let cloudDoc = null;
+let cloudBusy = false;
+let cloudDirty = false;
+
+function saveVehicles() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles));
+    localStorage.setItem(WARN_KEY, $('warnDays').value);
+  } catch {
+    // storage unavailable (private mode etc.) — keep working in memory
+  }
+  if (cloudDoc) saveCloud();
+}
+
+// One write at a time; changes made while a write is in flight are
+// coalesced into the next one.
+async function saveCloud() {
+  cloudDirty = true;
+  if (cloudBusy) return;
+  cloudBusy = true;
+  while (cloudDirty) {
+    cloudDirty = false;
+    try {
+      await cloudDoc.set({
+        vehicles: JSON.parse(JSON.stringify(vehicles)),
+        warnDays: Number($('warnDays').value),
+      });
+    } catch {
+      showToast('Nu am putut salva în cont. Modificările rămân în acest browser.');
+      break;
+    }
+  }
+  cloudBusy = false;
+}
+
+async function connectCloud() {
+  if (!IN_CLAUDE) return;
+  try {
+    const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    if (!db || !user) return;
+    const uid = await user.id();
+    if (!uid) return;
+    const ref = db.doc(`data/users/${uid}/garage`);
+    const snap = await ref.get();
+    cloudDoc = ref;
+    if (snap.exists) {
+      const data = snap.data();
+      vehicles = Array.isArray(data.vehicles) ? data.vehicles.map((v) => ({ ...v })) : [];
+      if ([7, 14, 30, 60].includes(data.warnDays)) $('warnDays').value = String(data.warnDays);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(vehicles)); } catch { /* ignore */ }
+      render();
+    } else {
+      saveCloud();
+    }
+    $('storageNote').textContent = 'Datele sunt salvate în contul tău și sunt vizibile doar pentru tine.';
+  } catch {
+    // stay on localStorage
+  }
+}
+
 // ---------- status ----------
 
 function statusOf(days, warnDays) {
@@ -116,6 +199,32 @@ function soonestDays(vehicle) {
   return all.length ? Math.min(...all) : Infinity;
 }
 
+function icsDate(date) {
+  return toInputDate(date).replace(/-/g, '');
+}
+
+function googleCalendarUrl(vehicle, doc) {
+  const date = parseDate(vehicle[doc.key]);
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `Expiră ${doc.label} – ${vehicle.plate}`,
+    dates: `${icsDate(date)}/${icsDate(addDays(date, 1))}`,
+    details: [vehicle.model, vehicle.notes].filter(Boolean).join('\n'),
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+const openCalendars = new Set();
+
+function calendarRow(v) {
+  const links = DOCS
+    .filter((doc) => parseDate(v[doc.key]))
+    .map((doc) => `<a href="${googleCalendarUrl(v, doc)}" target="_blank" rel="noopener">${doc.label} în Google Calendar</a>`);
+  if (!links.length) return '<div class="cal">Nu există date de expirare pentru această mașină.</div>';
+  const ics = IN_CLAUDE ? '' : `<button type="button" class="small" data-action="ics" data-id="${escapeHtml(v.id)}">Descarcă .ics (toate)</button>`;
+  return `<div class="cal">${links.join('')}${ics}</div>`;
+}
+
 function render() {
   const warnDays = Number($('warnDays').value);
   const list = $('vehicleList');
@@ -131,11 +240,12 @@ function render() {
   let soon = 0;
 
   list.innerHTML = sorted.map((v) => {
+    const id = escapeHtml(v.id);
     const docs = DOCS.map((doc) => {
       const days = daysUntil(v[doc.key]);
       const st = statusOf(days, warnDays);
-      if (st.cls === 'bad') expired++;
-      if (st.cls === 'warn') soon++;
+      if (!v.example && st.cls === 'bad') expired++;
+      if (!v.example && st.cls === 'warn') soon++;
       return `
         <div class="doc ${st.cls}">
           <strong>${doc.label}</strong>
@@ -147,26 +257,66 @@ function render() {
     return `
       <article class="vehicle">
         <div class="vehicle-head">
-          <span class="plate">${escapeHtml(v.plate)}</span>
+          <span>
+            <span class="plate"><span>${escapeHtml(v.plate)}</span></span>
+            ${v.example ? '<span class="tag none">Exemplu</span>' : ''}
+          </span>
           <span class="model">${escapeHtml([v.model, v.year].filter(Boolean).join(' · '))}</span>
         </div>
         <div class="docs">${docs}</div>
         ${v.notes ? `<p class="notes">${escapeHtml(v.notes)}</p>` : ''}
         <div class="vehicle-actions">
-          <button type="button" class="small" data-action="edit" data-id="${v.id}">Editează</button>
-          <button type="button" class="small" data-action="ics" data-id="${v.id}">Adaugă în calendar</button>
-          <button type="button" class="small danger" data-action="delete" data-id="${v.id}">Șterge</button>
+          <button type="button" class="small" data-action="edit" data-id="${id}">Editează</button>
+          <button type="button" class="small" data-action="calendar" data-id="${id}" aria-expanded="${openCalendars.has(v.id)}">Adaugă în calendar</button>
+          <button type="button" class="small danger" data-action="delete" data-id="${id}">Șterge</button>
         </div>
+        ${openCalendars.has(v.id) ? calendarRow(v) : ''}
       </article>`;
   }).join('');
 
-  const pills = [
-    `<span class="pill none">${vehicles.length} ${vehicles.length === 1 ? 'mașină' : 'mașini'}</span>`,
-  ];
-  if (expired) pills.push(`<span class="pill bad">${expired} expirate</span>`);
+  const real = vehicles.filter((v) => !v.example).length;
+  const pills = [`<span class="pill none">${real} ${real === 1 ? 'mașină' : 'mașini'}</span>`];
+  if (expired) pills.push(`<span class="pill bad">${expired} ${expired === 1 ? 'document expirat' : 'documente expirate'}</span>`);
   if (soon) pills.push(`<span class="pill warn">${soon} expiră curând</span>`);
-  if (!expired && !soon) pills.push('<span class="pill ok">Totul în regulă</span>');
+  if (real && !expired && !soon) pills.push('<span class="pill ok">Totul în regulă</span>');
   $('summary').innerHTML = pills.join('');
+}
+
+// ---------- confirmations & messages (in-page; no alert/confirm) ----------
+
+let confirmAction = null;
+let toastTimer = null;
+
+function askConfirm(text, yesLabel, action) {
+  $('toast').hidden = true;
+  $('confirmText').textContent = text;
+  $('confirmYes').textContent = yesLabel;
+  confirmAction = action;
+  $('confirmBar').hidden = false;
+  $('confirmNo').focus();
+}
+
+function closeConfirm() {
+  $('confirmBar').hidden = true;
+  confirmAction = null;
+}
+
+$('confirmYes').addEventListener('click', () => {
+  const action = confirmAction;
+  closeConfirm();
+  action?.();
+});
+$('confirmNo').addEventListener('click', closeConfirm);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('confirmBar').hidden) closeConfirm();
+});
+
+function showToast(text) {
+  if (!$('confirmBar').hidden) return;
+  $('toast').textContent = text;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000);
 }
 
 // ---------- form ----------
@@ -226,13 +376,14 @@ $('vehicleForm').addEventListener('submit', (e) => {
 
   const id = $('vehicleId').value;
   if (id) {
-    vehicles = vehicles.map((v) => (v.id === id ? { ...v, ...data } : v));
+    vehicles = vehicles.map((v) => (v.id === id ? { ...v, ...data, example: false } : v));
   } else {
     vehicles.push({ id: crypto.randomUUID?.() ?? String(Date.now()), ...data });
   }
   saveVehicles();
   resetForm();
   render();
+  showToast(id ? `${data.plate} a fost actualizată.` : `${data.plate} a fost adăugată.`);
 });
 
 $('cancelBtn').addEventListener('click', resetForm);
@@ -250,12 +401,19 @@ $('vehicleList').addEventListener('click', (e) => {
       fillForm(vehicle);
       break;
     case 'delete':
-      if (confirm(`Ștergi ${vehicle.plate}?`)) {
+      askConfirm(`Ștergi ${vehicle.plate}?`, 'Șterge', () => {
         vehicles = vehicles.filter((v) => v.id !== vehicle.id);
+        openCalendars.delete(vehicle.id);
         saveVehicles();
         if ($('vehicleId').value === vehicle.id) resetForm();
         render();
-      }
+        showToast(`${vehicle.plate} a fost ștearsă.`);
+      });
+      break;
+    case 'calendar':
+      if (openCalendars.has(vehicle.id)) openCalendars.delete(vehicle.id);
+      else openCalendars.add(vehicle.id);
+      render();
       break;
     case 'ics':
       downloadIcs(vehicle);
@@ -265,15 +423,11 @@ $('vehicleList').addEventListener('click', (e) => {
 
 $('warnDays').value = String(loadWarnDays());
 $('warnDays').addEventListener('change', () => {
-  try { localStorage.setItem(WARN_KEY, $('warnDays').value); } catch { /* ignore */ }
+  saveVehicles();
   render();
 });
 
-// ---------- calendar export (.ics) ----------
-
-function icsDate(date) {
-  return toInputDate(date).replace(/-/g, '');
-}
+// ---------- calendar export (.ics, outside claude.ai only) ----------
 
 function icsEscape(str) {
   return String(str).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
@@ -286,14 +440,13 @@ function downloadIcs(vehicle) {
     .filter((doc) => parseDate(vehicle[doc.key]))
     .map((doc) => {
       const date = parseDate(vehicle[doc.key]);
-      const next = new Date(date.getTime() + DAY_MS);
       const summary = `Expiră ${doc.label} – ${vehicle.plate}`;
       return [
         'BEGIN:VEVENT',
         `UID:${vehicle.id}-${doc.key}-${icsDate(date)}@itp-tracker`,
         `DTSTAMP:${stamp}`,
         `DTSTART;VALUE=DATE:${icsDate(date)}`,
-        `DTEND;VALUE=DATE:${icsDate(next)}`,
+        `DTEND;VALUE=DATE:${icsDate(addDays(date, 1))}`,
         `SUMMARY:${icsEscape(summary)}`,
         'BEGIN:VALARM',
         `TRIGGER:-P${warnDays}D`,
@@ -303,11 +456,6 @@ function downloadIcs(vehicle) {
         'END:VEVENT',
       ].join('\r\n');
     });
-
-  if (!events.length) {
-    alert('Nu există date de expirare pentru această mașină.');
-    return;
-  }
 
   const ics = [
     'BEGIN:VCALENDAR',
@@ -323,6 +471,17 @@ function downloadIcs(vehicle) {
 
 // ---------- import / export ----------
 
+let downloadsApi = null;
+if (IN_CLAUDE) {
+  // Plain downloads are blocked in the artifact viewer; use its save dialog,
+  // and hide Export when that is unavailable.
+  $('exportBtn').hidden = true;
+  window.claude.use('downloads').then((api) => {
+    downloadsApi = api;
+    $('exportBtn').hidden = !api;
+  }).catch(() => {});
+}
+
 function download(filename, content, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement('a');
@@ -334,28 +493,51 @@ function download(filename, content, type) {
   URL.revokeObjectURL(url);
 }
 
-$('exportBtn').addEventListener('click', () => {
-  download(`itp-tracker-${toInputDate(today())}.json`, JSON.stringify(vehicles, null, 2), 'application/json');
+$('exportBtn').addEventListener('click', async () => {
+  const filename = `itp-tracker-${toInputDate(today())}.json`;
+  const data = JSON.stringify(vehicles.filter((v) => !v.example), null, 2);
+  if (!downloadsApi) {
+    download(filename, data, 'application/json');
+    return;
+  }
+  try {
+    await downloadsApi.save({ filename, data });
+    showToast('Backup salvat.');
+  } catch (err) {
+    if (err?.code === 'rate_limited') showToast('Există deja o salvare în curs. Încearcă din nou în câteva secunde.');
+    else if (err?.code !== 'declined') showToast('Salvarea fișierului nu este disponibilă aici.');
+  }
 });
+
+function applyImport(data) {
+  vehicles = data;
+  openCalendars.clear();
+  saveVehicles();
+  resetForm();
+  render();
+  showToast(`Am importat ${data.length} ${data.length === 1 ? 'mașină' : 'mașini'}.`);
+}
 
 $('importInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
+  let data;
   try {
-    const data = JSON.parse(await file.text());
-    if (!Array.isArray(data) || !data.every((v) => v && typeof v.plate === 'string' && v.id)) {
-      throw new Error('format invalid');
-    }
-    if (vehicles.length && !confirm(`Înlocuiești cele ${vehicles.length} mașini existente cu ${data.length} din fișier?`)) {
-      return;
-    }
-    vehicles = data;
-    saveVehicles();
-    resetForm();
-    render();
-  } catch (err) {
-    alert(`Importul a eșuat: ${err.message}`);
+    data = JSON.parse(await file.text());
+  } catch {
+    showToast('Fișierul nu este un JSON valid. Alege un fișier creat cu Export.');
+    return;
+  }
+  if (!Array.isArray(data) || !data.every((v) => v && typeof v.plate === 'string' && v.id)) {
+    showToast('Fișierul nu conține mașini. Alege un fișier creat cu Export.');
+    return;
+  }
+  const existing = vehicles.filter((v) => !v.example).length;
+  if (existing) {
+    askConfirm(`Înlocuiești cele ${existing} mașini existente cu ${data.length} din fișier?`, 'Înlocuiește', () => applyImport(data));
+  } else {
+    applyImport(data);
   }
 });
 
@@ -363,3 +545,4 @@ $('importInput').addEventListener('change', async (e) => {
 
 updateItpHint();
 render();
+connectCloud();
