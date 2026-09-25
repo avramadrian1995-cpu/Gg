@@ -1,8 +1,13 @@
 package ro.miseda.itp;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.text.InputType;
+import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -24,6 +29,8 @@ public class MainActivity extends Activity {
 
     private static final int FILE_CHOOSER = 1;
     private static final String OFFLINE_PAGE = "file:///android_asset/offline.html";
+    private static final String PREFS = "miseda";
+    private static final String PREF_URL = "server_url";
 
     private WebView web;
     private Uri siteUri;
@@ -32,7 +39,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        siteUri = Uri.parse(BuildConfig.SITE_URL);
+        siteUri = Uri.parse(savedServerUrl());
 
         web = new WebView(this);
         web.setBackgroundColor(0xFFF3F5F8);
@@ -83,9 +90,46 @@ public class MainActivity extends Activity {
 
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
+        } else if (BuildConfig.ASK_SERVER_URL && !prefs().contains(PREF_URL)) {
+            askServerUrl();
         } else {
             web.loadUrl(startUrl(getIntent()));
         }
+    }
+
+    private SharedPreferences prefs() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE);
+    }
+
+    /** Test builds let the tester type the server address (e.g. a computer on the same Wi-Fi). */
+    private String savedServerUrl() {
+        if (!BuildConfig.ASK_SERVER_URL) return BuildConfig.SITE_URL;
+        return prefs().getString(PREF_URL, BuildConfig.SITE_URL);
+    }
+
+    private void askServerUrl() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setSingleLine(true);
+        input.setText(prefs().getString(PREF_URL, "http://192.168.1."));
+        input.setSelection(input.getText().length());
+        FrameLayout box = new FrameLayout(this);
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(input);
+        new AlertDialog.Builder(this)
+            .setTitle("Adresa serverului")
+            .setMessage("Scrie adresa calculatorului pe care rulează serverul, de ex. http://192.168.1.25:3000")
+            .setView(box)
+            .setCancelable(false)
+            .setPositiveButton("Deschide", (d, w) -> {
+                String url = input.getText().toString().trim().replaceAll("/+$", "");
+                if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://" + url;
+                prefs().edit().putString(PREF_URL, url).apply();
+                siteUri = Uri.parse(url);
+                web.loadUrl(startUrl(null));
+            })
+            .show();
     }
 
     private String startUrl(Intent intent) {
@@ -104,8 +148,9 @@ public class MainActivity extends Activity {
         if (OFFLINE_PAGE.equals(uri.toString())) return false;
         if ((scheme.equals("https") || scheme.equals("http")) && isOwnSite(uri)) return false;
         if (scheme.equals("file")) return true;
-        if (scheme.equals("miseda")) { // "Încearcă din nou" on the offline page
-            web.loadUrl(startUrl(null));
+        if (scheme.equals("miseda")) { // buttons on the offline page
+            if ("settings".equals(uri.getHost()) && BuildConfig.ASK_SERVER_URL) askServerUrl();
+            else web.loadUrl(startUrl(null));
             return true;
         }
         try {

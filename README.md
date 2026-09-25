@@ -94,6 +94,10 @@ gradle assembleDebug -PsiteUrl=https://adresa-unde-rulează-serverul
 # APK: android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Varianta **debug** („ITP Miseda (test)”, pachet `ro.miseda.itp.test`) cere adresa serverului la prima pornire
+și permite http în rețeaua locală, ca să o puteți încerca cu serverul pornit pe un calculator din același Wi-Fi.
+Adresa se schimbă din ecranul „fără internet”. Varianta release folosește doar `siteUrl` și doar HTTPS.
+
 Pentru Google Play construiți varianta release semnată (`gradle bundleRelease`) cu cheia dată prin
 `MISEDA_KEYSTORE`, `MISEDA_KEYSTORE_PASSWORD`, `MISEDA_KEY_ALIAS`. Păstrați cheia în siguranță: fără ea nu mai puteți publica actualizări.
 
